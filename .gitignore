@@ -5,5 +5,5 @@ venv/
 __pycache__/
 logs/
 *.pyc
-C:\Users\Akash\LLMOPS\LLMOPS\Document_portal\.env
-C:\Users\Akash\LLMOPS\LLMOPS\Document_portal\doc_env
+#C:\Users\Akash\LLMOPS\LLMOPS\Document_portal\.env
+doc_env
