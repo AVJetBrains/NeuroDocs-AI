@@ -8,39 +8,52 @@ import shutil
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Iterable, List, Optional, Dict, Any
+
+import fitz  # PyMuPDF
+from langchain.schema import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, TextLoader
+from langchain_community.vectorstores import FAISS
+
 from utils.model_loader import ModelLoader
 from logger.custom_logger import CustomLogger
 from exception.custom_exception import DocumentPortalException
+
 log = CustomLogger().get_logger(__name__)
+
+SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt"}
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt"}
 
-# ----------------------------- #
-# Helpers (file I/O + loading)  #
-# ----------------------------- #
-def _session_id(prefix: str = "session") -> str:
-    return f"{prefix}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
-
-def save_uploaded_files(uploaded_files: Iterable, target_dir: Path) -> List[Path]:
-    """Save uploaded files (Streamlit-like) and return local paths."""
+def load_documents(paths: Iterable[Path]) -> List[Document]:
+    """Load docs using appropriate loader based on extension."""
+    docs: List[Document] = []
     try:
-        target_dir.mkdir(parents=True, exist_ok=True)
-        saved: List[Path] = []
-        for uf in uploaded_files:
-            name = getattr(uf, "name", "file")
-            ext = Path(name).suffix.lower()
-            if ext not in SUPPORTED_EXTENSIONS:
-                log.warning("Unsupported file skipped", filename=name)
+        for p in paths:
+            ext = p.suffix.lower()
+            if ext == ".pdf":
+                loader = PyPDFLoader(str(p))
+            elif ext == ".docx":
+                loader = Docx2txtLoader(str(p))
+            elif ext == ".txt":
+                loader = TextLoader(str(p), encoding="utf-8")
+            else:
+                log.warning("Unsupported extension skipped", path=str(p))
                 continue
-            fname = f"{uuid.uuid4().hex[:8]}{ext}"
-            out = target_dir / fname
-            with open(out, "wb") as f:
-                if hasattr(uf, "read"):
-                    f.write(uf.read())
-                else:
-                    f.write(uf.getbuffer())  # fallback
-            saved.append(out)
-            log.info("File saved for ingestion", uploaded=name, saved_as=str(out))
-        return saved
+            docs.extend(loader.load())
+        log.info("Documents loaded", count=len(docs))
+        return docs
     except Exception as e:
-        log.error("Failed to save uploaded files", error=str(e), dir=str(target_dir))
-        raise DocumentPortalException("Failed to save uploaded files", e) from e
+        log.error("Failed loading documents", error=str(e))
+        raise DocumentPortalException("Error loading documents", e) from e
+
+def concat_for_analysis(docs: List[Document]) -> str:
+    parts = []
+    for d in docs:
+        src = d.metadata.get("source") or d.metadata.get("file_path") or "unknown"
+        parts.append(f"\n--- SOURCE: {src} ---\n{d.page_content}")
+    return "\n".join(parts)
+
+def concat_for_comparison(ref_docs: List[Document], act_docs: List[Document]) -> str:
+    left = concat_for_analysis(ref_docs)
+    right = concat_for_analysis(act_docs)
+    return f"<<REFERENCE_DOCUMENTS>>\n{left}\n\n<<ACTUAL_DOCUMENTS>>\n{right}"
