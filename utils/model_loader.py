@@ -3,6 +3,7 @@ import os
 import sys
 from dotenv import load_dotenv
 from utils.config_loader import load_config
+from .config_loader import load_config
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
@@ -59,7 +60,7 @@ class ModelLoader:
 
         log.info("Loading LLM...")
         
-        provider_key = os.getenv("LLM_PROVIDER", "groq")  # Default groq
+        provider_key = os.getenv("LLM_PROVIDER", "google")  # Default google
         if provider_key not in llm_block:
             log.error("LLM provider not found in config", provider_key=provider_key)
             raise ValueError(f"Provider '{provider_key}' not found in config")
@@ -108,12 +109,13 @@ if __name__ == "__main__":
     embeddings = loader.load_embeddings()
     print(f"Embedding Model Loaded: {embeddings}")
     
+    # Test the ModelLoader
+    result=embeddings.embed_query("Hello, how are you?")
+    print(f"Embedding Result: {result}")
+    
     # Test LLM loading based on YAML config
     llm = loader.load_llm()
     print(f"LLM Loaded: {llm}")
-
-    result = embeddings.embed_query("Hello, How are you")
-    print(f"Embedding Result: {result}")
     
     # Test the ModelLoader
     result=llm.invoke("Hello, how are you?")
